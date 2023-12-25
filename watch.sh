@@ -1,3 +1,3 @@
 #!/bin/bash
 
-doppler run -- node ./dist/watch.js
+doppler run --config prd -- node ./dist/watch.js

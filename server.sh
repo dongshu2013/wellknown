@@ -1,3 +1,3 @@
 #!/bin/bash
 
-doppler run -- node ./dist/index.js
+doppler run --config prd -- node ./dist/index.js
