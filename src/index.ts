@@ -1,18 +1,11 @@
 import cors from "cors";
 import express, { Request, Response, Application } from "express";
-import { RedisService } from "./redis";
 import { getPubkey } from "./ns";
 import { HexlinkError } from "./types";
 
 const app: Application = express();
 const port = process.env.PORT || 8000;
-
-const allowedOrigins = ["http://localhost:3000", "https://relay.hexlink.io"];
-const options: cors.CorsOptions = {
-  origin: allowedOrigins,
-};
-
-app.use(cors(options));
+app.use(cors);
 app.use(express.json());
 
 app.get("/.well-known/nostr.json", async (req, res) => {
