@@ -9,17 +9,14 @@ const SEPOLIA = {
   name: "sepolia",
   chainId: 11155111,
 };
-
-const SYS_LAST_BLOCK_KEY = "SYS:lastBlock";
-
 const manager = process.env.CONTRACT_V0_0_8_ACCOUNT_MANAGER!;
-
+const SCAN_SERVICE_URL = "https://api-sepolia.etherscan.io/api";
+const iface = AccountManager__factory.createInterface();
+const TOPIC_HASH = iface.getEvent("NewMetadata").topicHash;
 const provider = new ethers.InfuraProvider(
   SEPOLIA.chainId,
-  process.env.INFURA_API_KEY
+  process.env.INFURA_API_KEY!
 );
-
-const SCAN_SERVICE_URL = "https://api-sepolia.etherscan.io/api";
 
 function genUrl(query: Record<string, string>) {
   const params = new URLSearchParams(query);
@@ -28,8 +25,7 @@ function genUrl(query: Record<string, string>) {
 
 async function queryAllMetadataEvents(
   query: Record<string, string>,
-  redis: RedisService,
-  contract: AccountManager
+  redis: RedisService
 ) {
   const resp = await fetch(genUrl(query));
   const result = await resp.json();
@@ -41,24 +37,43 @@ async function queryAllMetadataEvents(
     return;
   }
   const events: Array<[string, string]> = logs.map((log) => {
-    const parsed = contract.interface.parseLog(log);
-    console.log("======> ", parsed!.args.account, " <-> ", parsed!.args.metadata)
+    const parsed = iface.parseLog(log);
+    console.log(
+      "======> ",
+      parsed!.args.account,
+      " <-> ",
+      parsed!.args.metadata
+    );
     return [parsed!.args.account, parsed!.args.metadata];
   });
   await redis.mset(events);
   if (logs.length === Number(query.offset)) {
     const nextPage = Number(query.page) + 1;
     query.page = nextPage.toString();
-    queryAllMetadataEvents(query, redis, contract);
+    await queryAllMetadataEvents(query, redis);
   }
 }
 
-async function cacheMetadataEvents(
-  redis: RedisService,
-  toBlock: number,
-  contract: AccountManager
-) {
-  const fromBlock = await redis.get(SYS_LAST_BLOCK_KEY);
+const subscribeMetadataEvent = async (wssProvider: ethers.WebSocketProvider) => {
+  const currentBlock = await provider.getBlockNumber();
+  console.log("current block is ", currentBlock);
+  const redis = await RedisService.getInstance();
+  console.log("adding listener...");
+  const filter = {
+    address: manager,
+    topics: [TOPIC_HASH],
+  };
+  wssProvider.on(filter, async (log) => {
+    const parsed = iface.parseLog(log);
+    console.log(
+      "======> ",
+      parsed!.args.account,
+      " <-> ",
+      parsed!.args.metadata
+    );
+    await redis.set(parsed!.args.account, parsed!.args.metadata);
+  });
+  console.log("restoring historical events...");
   await queryAllMetadataEvents(
     {
       module: "logs",
@@ -66,31 +81,13 @@ async function cacheMetadataEvents(
       apikey: process.env.ETHERSCAN_API_KEY!,
       page: "1",
       offset: "1000",
-      fromBlock: fromBlock ?? "0",
-      toBlock: Number(toBlock).toString(),
+      fromBlock: "0",
+      toBlock: Number(currentBlock).toString(),
       address: manager,
-      topic0: contract.interface.getEvent("NewMetadata").topicHash,
+      topic0: TOPIC_HASH,
     },
-    redis,
-    contract
+    redis
   );
-  await redis.set(SYS_LAST_BLOCK_KEY, toBlock.toString());
-}
-
-const subscribeMetadataEvent = async (contract: AccountManager) => {
-  const currentBlock = await provider.getBlockNumber();
-  console.log("current block is ", currentBlock);
-  const redis = await RedisService.getInstance();
-  console.log("adding listener...");
-  contract.on(
-    contract.filters.NewMetadata,
-    async (account: string, metadata: string) => {
-      console.log("======> ", account, " <-> ", metadata);
-      await redis.set(account, metadata);
-    }
-  );
-  console.log("restoring historical events...");
-  await cacheMetadataEvents(redis, currentBlock, contract);
   console.log("all historical events restored.");
 };
 
@@ -102,25 +99,25 @@ const createWebSocket = () => {
     reconnectBackoffFactor: 1.3,
     wsConstructor: WebSocket,
   });
-}
+};
 
 const ws = createWebSocket();
 const wssProvider = new ethers.WebSocketProvider(ws, SEPOLIA);
-const contract = AccountManager__factory.connect(manager, wssProvider);
 
 ws.onopen = async () => {
   console.log("infura ws opened");
-  contract.removeAllListeners();
-  await subscribeMetadataEvent(contract);
+  wssProvider.removeAllListeners();
+  console.log("subscribing...");
+  await subscribeMetadataEvent(wssProvider);
 };
 
 ws.onreopen = async () => {
   console.log("infura ws reopened");
-  contract.removeAllListeners();
-  await subscribeMetadataEvent(contract);
+  wssProvider.removeAllListeners();
+  await subscribeMetadataEvent(wssProvider);
 };
 
 ws.onclose = async () => {
   console.log("infura ws closed");
-  contract.removeAllListeners();
+  wssProvider.removeAllListeners();
 };
