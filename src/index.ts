@@ -1,5 +1,5 @@
 import cors from "cors";
-import express, { Request, Response, Application } from "express";
+import express, { Application } from "express";
 import { getPubkey } from "./ns";
 import { HexlinkError } from "./types";
 
@@ -17,18 +17,14 @@ app.get("/.well-known/nostr.json", async (req, res) => {
     } else {
       res.status(404).send("Not found");
     }
-  } catch(err: unknown) {
+  } catch (err: unknown) {
     if (err instanceof HexlinkError) {
-      res.status(err.code).json({message: err.message});
+      res.status(err.code).json({ message: err.message });
     } else {
       console.log("Error: ", err);
-      res.status(500).json({message: "internal server error"});
+      res.status(500).json({ message: "internal server error" });
     }
   }
-});
-
-app.get("/", (req: Request, res: Response) => {
-  res.redirect("https://www.hexlink.io");
 });
 
 app.listen(port, () => {
