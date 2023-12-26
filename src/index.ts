@@ -5,8 +5,7 @@ import { HexlinkError } from "./types";
 
 const app: Application = express();
 const port = Number(process.env.PORT) || 8000;
-app.use(cors);
-app.use(express.json());
+app.use(cors());
 
 app.get("/.well-known/nostr.json", async (req, res) => {
   if (!req.query.name || typeof req.query.name !== "string") {
@@ -18,22 +17,22 @@ app.get("/.well-known/nostr.json", async (req, res) => {
   try {
     const pubkey = await getPubkey(name);
     if (pubkey) {
-      res.status(200).json({ names: { [name]: pubkey } });
+      return res.status(200).json({ names: { [name]: pubkey } });
     } else {
-      res.status(404).send("Not found");
+      return res.status(404).send("Not found");
     }
   } catch (err: unknown) {
     if (err instanceof HexlinkError) {
-      res.status(err.code).json({ message: err.message });
+      return res.status(err.code).json({ message: err.message });
     } else {
       console.log("Error: ", err);
-      res.status(500).json({ message: "internal server error" });
+      return res.status(500).json({ message: "internal server error" });
     }
   }
 });
 
-app.get('*', function(_req, res){
-  res.status(404).send('Not Found');
+app.get('*', function(_req, res) {
+  return res.status(404).send('Not Found');
 });
 
 app.listen(port, "0.0.0.0", () => {
