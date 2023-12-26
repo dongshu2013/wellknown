@@ -49,7 +49,7 @@ export const getPubkey = async (name: string): Promise<HexString | undefined> =>
     const uid = genNameHash(name);
     const address = await resolveUid(uid);
     if (!address) {
-        throw new HexlinkError(400, "Failed to resolve uid");
+        throw new HexlinkError(404, "name not registered");
     }
     const redis = await RedisService.getInstance();
     const pubkey = await redis.get(address);
