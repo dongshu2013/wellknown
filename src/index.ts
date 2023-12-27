@@ -17,7 +17,12 @@ app.get("/.well-known/nostr.json", async (req, res) => {
   try {
     const pubkey = await getPubkey(name);
     if (pubkey) {
-      return res.status(200).json({ names: { [name]: pubkey } });
+      return res.status(200).json({
+        names: { [name]: pubkey },
+        relays: {
+          [pubkey]: ["https://relay.hexlink.io"]
+        },
+      });
     } else {
       return res.status(404).send("Not found");
     }
